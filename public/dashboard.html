@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>FamilyFlow</title>
+   <link rel="icon" type="image/png" href="/icon.png">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#3b82f6">
+  <style>
+    body {
+      margin:0;
+      font-family:Arial;
+      background:#f4f6fb;
+      padding-bottom:80px;
+    }
+
+    .header {
+      display:flex;
+      justify-content:space-between;
+      padding:15px;
+      background:white;
+      box-shadow:0 2px 5px rgba(0,0,0,0.1);
+    }
+
+    .logout {
+      background:red;
+      color:white;
+      border:none;
+      padding:8px 12px;
+      border-radius:6px;
+    }
+
+    .card {
+      background:white;
+      margin:12px;
+      padding:15px;
+      border-radius:14px;
+      box-shadow:0 4px 10px rgba(0,0,0,0.05);
+    }
+
+    .balance {
+      display:flex;
+      justify-content:space-between;
+      text-align:center;
+    }
+
+    .actions {
+      display:flex;
+      justify-content:space-around;
+      margin:10px;
+    }
+
+    .actions button {
+      width:60px;
+      height:60px;
+      border-radius:50%;
+      border:none;
+      font-size:20px;
+      background:#e5e7eb;
+    }
+
+    .item {
+      border-bottom:1px solid #eee;
+      padding:10px 0;
+      display:flex;
+      justify-content:space-between;
+    }
+
+    .bottom {
+      position:fixed;
+      bottom:0;
+      width:100%;
+      display:flex;
+      justify-content:space-around;
+      background:white;
+      padding:10px;
+      box-shadow:0 -2px 10px rgba(0,0,0,0.1);
+    }
+
+    .add {
+      background:#3b82f6;
+      color:white;
+      padding:10px 15px;
+      border-radius:50%;
+      font-size:20px;
+    }
+
+    /* POPUP */
+    .popup {
+      position:fixed;
+      top:0;
+      left:0;
+      width:100%;
+      height:100%;
+      background:rgba(0,0,0,0.4);
+      display:none;
+      justify-content:center;
+      align-items:center;
+    }
+
+    .popup-box {
+      background:white;
+      padding:20px;
+      border-radius:12px;
+      width:85%;
+      max-width:320px;
+    }
+
+    .popup-box input,
+    .popup-box select {
+      width:100%;
+      padding:10px;
+      margin:5px 0;
+    }
+
+    .popup-box button {
+      width:100%;
+      padding:10px;
+      margin-top:5px;
+      border:none;
+      background:#3b82f6;
+      color:white;
+      border-radius:6px;
+    }
+
+    .cancel {
+      background:#ddd !important;
+      color:black !important;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="header">
+  <h3>FamilyFlow</h3>
+  <button class="logout" onclick="logout()">Logout</button>
+</div>
+
+<div class="card balance">
+  <div>
+    <p>Wallet</p>
+    <h2>₹<span id="bal">0</span></h2>
+  </div>
+  <div>
+    <p>Savings</p>
+    <h2>₹<span id="sav">0</span></h2>
+  </div>
+</div>
+
+<div class="actions">
+  <button onclick="openPopup('add')">💰</button>
+  <button onclick="openPopup('expense')">💸</button>
+  <button onclick="openPopup('send')">🔁</button>
+  <button onclick="openPopup('saving')">🏦</button>
+</div>
+
+<div class="card">
+  <h4>📜 Transactions</h4>
+  <div id="list"></div>
+</div>
+
+<div class="card">
+  <h4>🧾 Loans</h4>
+  <div id="loanList"></div>
+</div>
+
+<div class="bottom">
+  <div>🏠</div>
+  <div>📜</div>
+  <div class="add">+</div>
+  <div>🎯</div>
+  <div>💳</div>
+</div>
+
+<!-- POPUP -->
+<div id="popup" class="popup">
+  <div class="popup-box">
+    <h3 id="popupTitle">Action</h3>
+
+    <input id="popupAmount" placeholder="Enter Amount">
+    <input id="popupNote" placeholder="Enter Note">
+
+    <select id="popupUser" style="display:none;"></select>
+
+    <select id="popupType" style="display:none;">
+      <option value="transfer">Transfer (Not Return)</option>
+      <option value="loan">Loan (Returnable)</option>
+    </select>
+
+    <button onclick="submitPopup()">Submit</button>
+    <button onclick="closePopup()" class="cancel">Cancel</button>
+  </div>
+</div>
+
+<script>
+const user = JSON.parse(localStorage.getItem("user"));
+if (!user) location.href = "/";
+
+let actionType = "";
+
+// LOAD DATA
+async function load() {
+  const resUser = await fetch(`/api/users/details?familyName=${user.familyName}`);
+  const users = await resUser.json();
+
+  const current = users.find(u => u.name === user.name);
+
+  bal.innerText = current?.balance || 0;
+  sav.innerText = current?.savings || 0;
+
+  const res = await fetch("/api/transactions");
+  let data = await res.json();
+
+  data = data.filter(t =>
+    t.fromUser === user.name || t.toUser === user.name
+  );
+
+  list.innerHTML = data.map(t => {
+
+    let icon = "📄";
+    let color = "#333";
+    let title = "";
+
+    if (t.type === "income") {
+      icon = "💰"; color = "green"; title = "Income";
+    } else if (t.type === "expense") {
+      icon = "💸"; color = "red"; title = "Expense";
+    } else if (t.type === "transfer") {
+      icon = "🔁"; color = "blue";
+      title = `${t.fromUser} → ${t.toUser}`;
+    } else if (t.type === "loan") {
+      icon = "💳"; color = "orange";
+      title = `Loan: ${t.fromUser} → ${t.toUser}`;
+    }
+
+    return `
+      <div class="item">
+        <div>
+          ${icon} <b>${title}</b><br>
+          <small>${t.note || ""}</small>
+        </div>
+        <div style="color:${color}">
+          ₹${t.amount || 0}
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+// OPEN POPUP
+function openPopup(type) {
+  actionType = type;
+
+  popup.style.display = "flex";
+  popupAmount.value = "";
+  popupNote.value = "";
+
+  popupUser.style.display = "none";
+  popupType.style.display = "none";
+
+  if (type === "add") popupTitle.innerText = "💰 Add Money";
+  else if (type === "expense") popupTitle.innerText = "💸 Expense";
+
+  else if (type === "send") {
+    popupTitle.innerText = "🔁 Transfer / Loan";
+    popupUser.style.display = "block";
+    popupType.style.display = "block";
+
+    fetch(`/api/users/details?familyName=${user.familyName}`)
+      .then(r => r.json())
+      .then(users => {
+        popupUser.innerHTML = users
+          .filter(u => u.name !== user.name)
+          .map(u => `<option value="${u.name}">${u.name}</option>`)
+          .join("");
+      });
+  }
+
+  else if (type === "saving") {
+    popupTitle.innerText = "🏦 Add to Savings";
+  }
+}
+
+// CLOSE
+function closePopup() {
+  popup.style.display = "none";
+}
+
+// SUBMIT
+async function submitPopup() {
+  const amount = Number(popupAmount.value);
+  const note = popupNote.value;
+
+  if (!amount) return alert("Enter amount");
+
+  if (actionType === "add") {
+    await fetch("/api/transactions/add", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ name:user.name, amount, note })
+    });
+  }
+
+  else if (actionType === "expense") {
+    await fetch("/api/transactions/expense", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ name:user.name, amount, note })
+    });
+  }
+
+  else if (actionType === "send") {
+    await fetch("/api/transactions/send", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
+        fromUser:user.name,
+        toUser:popupUser.value,
+        amount,
+        note,
+        type: popupType.value
+      })
+    });
+  }
+
+  else if (actionType === "saving") {
+    await fetch("/api/transactions/savings/add", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
+        name:user.name,
+        amount
+      })
+    });
+  }
+
+  closePopup();
+  load();
+}
+
+// LOGOUT
+function logout() {
+  localStorage.removeItem("user");
+  location.href = "/";
+}
+
+load();
+</script>
+
+</body>
+</html>

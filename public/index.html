@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>FamilyFlow Login</title>
+  <link rel="icon" href="/icon.png">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- PWA -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#3b82f6">
+
+  <!-- Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+  <style>
+    body {
+      margin:0;
+      font-family:'Segoe UI', sans-serif;
+      background: linear-gradient(135deg,#3b82f6,#6366f1);
+      height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+
+    .container {
+      width:320px;
+      background:rgba(255,255,255,0.95);
+      backdrop-filter:blur(10px);
+      padding:25px;
+      border-radius:16px;
+      box-shadow:0 10px 30px rgba(0,0,0,0.2);
+      animation:fadeIn 0.4s ease;
+    }
+
+    @keyframes fadeIn {
+      from {transform:translateY(20px);opacity:0}
+      to {transform:translateY(0);opacity:1}
+    }
+
+    h2 {
+      text-align:center;
+      margin-bottom:20px;
+      color:#111;
+    }
+
+    .tabs {
+      display:flex;
+      background:#eee;
+      border-radius:10px;
+      overflow:hidden;
+      margin-bottom:15px;
+    }
+
+    .tabs button {
+      flex:1;
+      padding:10px;
+      border:none;
+      cursor:pointer;
+      background:transparent;
+      font-weight:600;
+    }
+
+    .tabs .active {
+      background:#3b82f6;
+      color:white;
+    }
+
+    input {
+      width:100%;
+      padding:12px;
+      margin:6px 0;
+      border-radius:10px;
+      border:1px solid #ddd;
+      outline:none;
+      font-size:14px;
+    }
+
+    input:focus {
+      border-color:#3b82f6;
+    }
+
+    .login-btn {
+      width:100%;
+      padding:12px;
+      border:none;
+      background:#3b82f6;
+      color:white;
+      border-radius:10px;
+      margin-top:10px;
+      font-weight:bold;
+      cursor:pointer;
+      transition:0.2s;
+    }
+
+    .login-btn:hover {
+      background:#2563eb;
+    }
+
+    .hidden { display:none; }
+
+    /* INSTALL BUTTON */
+    .install-btn {
+      width:100%;
+      padding:12px;
+      margin-top:12px;
+      border:none;
+      border-radius:10px;
+      font-weight:bold;
+      font-size:14px;
+      background:linear-gradient(135deg,#10b981,#059669);
+      color:white;
+      cursor:pointer;
+      display:none;
+      transition:0.3s;
+    }
+
+    .install-btn:hover {
+      transform:scale(1.03);
+    }
+
+    .footer {
+      text-align:center;
+      margin-top:10px;
+      font-size:12px;
+      color:#666;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="container">
+
+  <h2><i class="fa-solid fa-wallet"></i> FamilyFlow</h2>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button id="memberTab" class="active" onclick="showMember()">Member</button>
+    <button id="adminTab" onclick="showAdmin()">Admin</button>
+  </div>
+
+  <!-- MEMBER -->
+  <div id="memberBox">
+    <input id="phone" placeholder="📱 Enter Phone">
+    <button class="login-btn" onclick="login()">Login</button>
+  </div>
+
+  <!-- ADMIN -->
+  <div id="adminBox" class="hidden">
+    <input id="familyName" placeholder="🏠 Family Name">
+    <input id="password" type="password" placeholder="🔒 Password">
+    <button class="login-btn" onclick="adminLogin()">Admin Login</button>
+  </div>
+
+  <!-- INSTALL BUTTON -->
+  <button id="installBtn" class="install-btn">📲 Install App</button>
+
+  <div class="footer">FamilyFlow © 2026</div>
+
+</div>
+
+<!-- INSTALL SCRIPT -->
+<script>
+let deferredPrompt;
+
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+
+  const btn = document.getElementById("installBtn");
+  btn.style.display = "block";
+});
+
+document.getElementById("installBtn").addEventListener("click", async () => {
+  if (!deferredPrompt) {
+    alert("Install not available yet");
+    return;
+  }
+  deferredPrompt.prompt();
+});
+</script>
+
+<!-- LOGIN LOGIC -->
+<script>
+function showMember() {
+  memberBox.classList.remove("hidden");
+  adminBox.classList.add("hidden");
+  memberTab.classList.add("active");
+  adminTab.classList.remove("active");
+}
+
+function showAdmin() {
+  memberBox.classList.add("hidden");
+  adminBox.classList.remove("hidden");
+  memberTab.classList.remove("active");
+  adminTab.classList.add("active");
+}
+
+async function login() {
+  const res = await fetch("/api/users/login", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ phone: phone.value })
+  });
+
+  const data = await res.json();
+  if (!res.ok) return alert(data.error);
+
+  localStorage.setItem("user", JSON.stringify(data.user));
+  location.href = "dashboard.html";
+}
+
+async function adminLogin() {
+  const res = await fetch("/api/users/admin-login", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({
+      familyName: familyName.value,
+      password: password.value
+    })
+  });
+
+  const data = await res.json();
+  if (!res.ok) return alert(data.error);
+
+  sessionStorage.setItem("admin","true");
+  sessionStorage.setItem("familyName", data.familyName);
+
+  location.href = "admin.html";
+}
+</script>
+
+<!-- SERVICE WORKER -->
+<script>
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js")
+    .then(() => console.log("SW Registered"))
+    .catch(err => console.log(err));
+}
+</script>
+
+</body>
+</html>

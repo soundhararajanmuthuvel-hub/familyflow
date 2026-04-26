@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Admin Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="icon" type="image/png" href="/icon.png">
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    body { margin:0; font-family:Arial; background:#f4f6fb; display:flex; }
+
+    .sidebar {
+      width:220px; background:#111827; color:white; height:100vh; padding:15px;
+    }
+
+    .sidebar h2 { margin-bottom:20px; }
+    .sidebar div { margin:10px 0; cursor:pointer; }
+
+    .main { flex:1; padding:20px; }
+
+    .top { display:flex; justify-content:space-between; margin-bottom:20px; }
+
+    .cards {
+      display:grid;
+      grid-template-columns:repeat(4,1fr);
+      gap:15px;
+    }
+
+    .card {
+      background:white;
+      padding:15px;
+      border-radius:12px;
+      box-shadow:0 4px 10px rgba(0,0,0,0.05);
+    }
+
+    .grid {
+      margin-top:20px;
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:15px;
+    }
+
+    .user { padding:8px 0; border-bottom:1px solid #eee; }
+
+    .txn { padding:8px 0; border-bottom:1px solid #eee; }
+
+    .paid { color:green; }
+    .partial { color:orange; }
+    .pending { color:red; }
+
+    button {
+      padding:6px 10px;
+      margin-top:5px;
+      border:none;
+      border-radius:6px;
+      cursor:pointer;
+      background:#3b82f6;
+      color:white;
+    }
+
+    .danger { background:red; }
+
+    input {
+      width:100%;
+      padding:8px;
+      margin:5px 0;
+    }
+  </style>
+</head>
+
+<body>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <h2>👨‍👩‍👧 FamilyFlow</h2>
+  <div>🏠 Dashboard</div>
+  <div>👥 Members</div>
+  <div>📜 Transactions</div>
+  <div>💳 Loans</div>
+  <div onclick="logout()" class="danger">🚪 Logout</div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <div class="top">
+    <h2>Admin Dashboard</h2>
+    <div id="family"></div>
+  </div>
+
+  <!-- STATS -->
+  <div class="cards">
+    <div class="card">👥 Members <h3 id="totalMembers">0</h3></div>
+    <div class="card">💰 Balance <h3 id="totalBalance">0</h3></div>
+    <div class="card">📜 Transactions <h3 id="totalTxn">0</h3></div>
+    <div class="card">💳 Loans <h3 id="totalLoans">0</h3></div>
+  </div>
+
+  <!-- CREATE MEMBER -->
+  <div class="card" style="margin-top:20px;">
+    <h3>Create Member</h3>
+    <input id="name" placeholder="Name">
+    <input id="phone" placeholder="Phone">
+    <button onclick="create()">Create</button>
+  </div>
+
+  <div class="grid">
+
+    <!-- RECENT TRANSACTIONS -->
+    <div class="card">
+      <h3>Recent Transactions</h3>
+      <div id="txnList"></div>
+    </div>
+
+    <!-- MEMBERS OVERVIEW -->
+    <div class="card">
+      <h3>Members Overview</h3>
+      <div id="memberList"></div>
+    </div>
+
+    <!-- LOANS -->
+    <div class="card">
+      <h3>Loans Overview</h3>
+      <div id="loanList"></div>
+    </div>
+
+    <!-- CHART -->
+    <div class="card">
+      <h3>Monthly Summary</h3>
+      <canvas id="chart"></canvas>
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+const familyName = sessionStorage.getItem("familyName");
+if (!familyName) location.href = "/";
+document.getElementById("family").innerText = "Family: " + familyName;
+
+
+// CREATE MEMBER
+async function create() {
+  const nameVal = document.getElementById("name").value.trim();
+  const phoneVal = document.getElementById("phone").value.trim();
+
+  if (!nameVal || !phoneVal) {
+    alert("Enter all fields properly");
+    return;
+  }
+
+  await fetch("/api/users/create", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({
+      name: nameVal,
+      phone: phoneVal,
+      familyName
+    })
+  });
+
+  // clear fields
+  document.getElementById("name").value = "";
+  document.getElementById("phone").value = "";
+
+  load();
+}
+
+// LOAD EVERYTHING
+async function load() {
+
+  const users = await (await fetch(`/api/users/details?familyName=${familyName}`)).json();
+  const txns = await (await fetch("/api/transactions")).json();
+
+  // MEMBERS
+  memberList.innerHTML = users.map(u => `
+    <div class="user">
+      ${u.name} — ₹${u.balance || 0}
+    </div>
+  `).join("");
+
+  // TRANSACTIONS
+  txnList.innerHTML = txns.slice(0,5).map(t => `
+    <div class="txn">
+      ${t.type} — ₹${t.amount}
+    </div>
+  `).join("");
+
+  // LOANS
+  const loans = txns.filter(t => t.type === "loan");
+
+  loanList.innerHTML = loans.map(l => {
+    const rem = l.amount - (l.paidAmount || 0);
+
+    return `
+      <div class="txn">
+        ${l.fromUser} → ${l.toUser}<br>
+        ₹${l.amount} | Remaining ₹${rem}<br>
+        <span class="${l.status}">${l.status}</span>
+      </div>
+    `;
+  }).join("");
+
+  // STATS
+  totalMembers.innerText = users.length;
+  totalBalance.innerText = "₹" + users.reduce((a,b)=>a+(b.balance||0),0);
+  totalTxn.innerText = txns.length;
+  totalLoans.innerText = loans.length;
+}
+
+
+// CHART
+async function loadChart() {
+  const data = await (await fetch("/api/transactions/monthly")).json();
+
+  new Chart(document.getElementById("chart"), {
+    type:"line",
+    data:{
+      labels:data.map(d=>"M"+d._id.month),
+      datasets:[{ label:"Flow", data:data.map(d=>d.total) }]
+    }
+  });
+}
+
+
+// LOGOUT
+function logout() {
+  sessionStorage.clear();
+  location.href = "/";
+}
+
+
+// INIT
+load();
+loadChart();
+</script>
+
+</body>
+</html>
