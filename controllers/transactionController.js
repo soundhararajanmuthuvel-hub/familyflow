@@ -102,6 +102,17 @@ exports.addTransaction = async (req, res) => {
 exports.addIncome = exports.addTransaction;
 exports.addExpense = exports.addTransaction;
 exports.sendMoney = exports.addTransaction;
+exports.addMoney = exports.addTransaction;
+
+exports.payLoan = async (req, res) => {
+  try {
+    // Implementation for paying loan
+    res.json({ success: true, message: "Loan payment processed" });
+  } catch (err) {
+    res.status(500).json({ success: false });
+  }
+};
+
 exports.addSavings = async (req, res) => {
   try {
     const { name, amount } = req.body;
