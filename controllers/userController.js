@@ -14,12 +14,13 @@ const login = async (req, res) => {
     const user = await User.findOne({ phone });
 
     if (!user) {
-      return res.status(400).json({ error: "User not found" });
+      return res.status(404).json({ error: "User not found" });
     }
 
     res.json({ user });
 
   } catch (err) {
+    console.error("LOGIN ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -27,13 +28,23 @@ const login = async (req, res) => {
 
 // 👑 ADMIN LOGIN
 const adminLogin = (req, res) => {
-  const { familyName, password } = req.body;
+  try {
+    const { familyName, password } = req.body;
 
-  if (password === "1234") {
-    return res.json({ success: true, familyName });
+    if (!familyName || !password) {
+      return res.status(400).json({ error: "All fields required" });
+    }
+
+    if (password === "1234") {
+      return res.json({ success: true, familyName });
+    }
+
+    res.status(401).json({ error: "Invalid admin login" });
+
+  } catch (err) {
+    console.error("ADMIN LOGIN ERROR:", err);
+    res.status(500).json({ error: err.message });
   }
-
-  res.status(401).json({ error: "Invalid admin login" });
 };
 
 
@@ -56,27 +67,34 @@ const createMember = async (req, res) => {
       phone,
       familyName,
       balance: 0,
+      savings: 0,
       role: "member"
     });
 
     res.json(user);
 
   } catch (err) {
+    console.error("CREATE MEMBER ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 };
 
 
-// 📊 GET USERS (by family)
+// 📊 GET USERS
 const getUsers = async (req, res) => {
   try {
     const { familyName } = req.query;
 
+    if (!familyName) {
+      return res.status(400).json({ error: "familyName required" });
+    }
+
     const users = await User.find({ familyName });
 
-    res.json(users);
+    res.json(users || []);
 
   } catch (err) {
+    console.error("GET USERS ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -89,6 +107,7 @@ const deleteUser = async (req, res) => {
     res.json({ message: "Deleted" });
 
   } catch (err) {
+    console.error("DELETE ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -106,28 +125,27 @@ const updateUser = async (req, res) => {
     res.json(user);
 
   } catch (err) {
+    console.error("UPDATE ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 };
 
 
-// 📊 MEMBER DETAILS (income/expense/transfer)
+// 📊 MEMBER DETAILS (OPTIMIZED 🚀)
 const getMemberDetails = async (req, res) => {
   try {
     const { familyName } = req.query;
 
+    if (!familyName) {
+      return res.status(400).json({ error: "familyName required" });
+    }
+
     const users = await User.find({ familyName });
 
-    const result = [];
+    // fetch all transactions once (performance fix 🔥)
+    const txns = await Transaction.find();
 
-    for (let user of users) {
-      const txns = await Transaction.find({
-        $or: [
-          { fromUser: user.name },
-          { toUser: user.name }
-        ]
-      });
-
+    const result = users.map(user => {
       let income = 0;
       let expense = 0;
       let transfer = 0;
@@ -141,31 +159,38 @@ const getMemberDetails = async (req, res) => {
           expense += t.amount;
         }
 
-        if (t.type === "transfer") {
+        if (t.type === "transfer" &&
+          (t.fromUser === user.name || t.toUser === user.name)
+        ) {
           transfer += t.amount;
         }
       });
 
-      result.push({
+      return {
         ...user.toObject(),
         income,
         expense,
         transfer
-      });
-    }
+      };
+    });
 
     res.json(result);
 
   } catch (err) {
+    console.error("MEMBER DETAILS ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 };
 
 
-// 📜 MEMBER TRANSACTION HISTORY
+// 📜 MEMBER TRANSACTIONS
 const getMemberTransactions = async (req, res) => {
   try {
     const { name } = req.params;
+
+    if (!name) {
+      return res.status(400).json({ error: "Name required" });
+    }
 
     const txns = await Transaction.find({
       $or: [
@@ -174,9 +199,10 @@ const getMemberTransactions = async (req, res) => {
       ]
     }).sort({ createdAt: -1 });
 
-    res.json(txns);
+    res.json(txns || []);
 
   } catch (err) {
+    console.error("MEMBER TXN ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 };

@@ -7,22 +7,28 @@ const addMoney = async (req, res) => {
   try {
     const { name, amount, note } = req.body;
 
+    if (!name || !amount) {
+      return res.status(400).json({ error: "Name and amount required" });
+    }
+
     const user = await User.findOne({ name });
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    user.balance = (user.balance || 0) + amount;
+    user.balance = (user.balance || 0) + Number(amount);
     await user.save();
 
     await Transaction.create({
       toUser: name,
-      amount,
+      amount: Number(amount),
       type: "income",
-      note: note || ""
+      note: note || "",
+      createdAt: new Date()
     });
 
     res.json({ message: "Money added" });
 
   } catch (err) {
+    console.error("ADD MONEY ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -33,22 +39,28 @@ const addExpense = async (req, res) => {
   try {
     const { name, amount, note } = req.body;
 
+    if (!name || !amount) {
+      return res.status(400).json({ error: "Name and amount required" });
+    }
+
     const user = await User.findOne({ name });
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    user.balance -= amount;
+    user.balance -= Number(amount);
     await user.save();
 
     await Transaction.create({
       fromUser: name,
-      amount,
+      amount: Number(amount),
       type: "expense",
-      note: note || ""
+      note: note || "",
+      createdAt: new Date()
     });
 
     res.json({ message: "Expense added" });
 
   } catch (err) {
+    console.error("EXPENSE ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -58,6 +70,10 @@ const addExpense = async (req, res) => {
 const sendMoney = async (req, res) => {
   try {
     const { fromUser, toUser, amount, type, note } = req.body;
+
+    if (!fromUser || !toUser || !amount || !type) {
+      return res.status(400).json({ error: "All fields required" });
+    }
 
     const sender = await User.findOne({ name: fromUser });
     const receiver = await User.findOne({ name: toUser });
@@ -70,8 +86,8 @@ const sendMoney = async (req, res) => {
       return res.status(400).json({ error: "Insufficient balance" });
     }
 
-    sender.balance -= amount;
-    receiver.balance += amount;
+    sender.balance -= Number(amount);
+    receiver.balance += Number(amount);
 
     await sender.save();
     await receiver.save();
@@ -79,16 +95,18 @@ const sendMoney = async (req, res) => {
     await Transaction.create({
       fromUser,
       toUser,
-      amount,
-      type, // transfer or loan
+      amount: Number(amount),
+      type,
       note: note || "",
       paidAmount: 0,
-      status: type === "loan" ? "pending" : "done"
+      status: type === "loan" ? "pending" : "done",
+      createdAt: new Date()
     });
 
     res.json({ message: "Success" });
 
   } catch (err) {
+    console.error("TRANSFER ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -110,13 +128,21 @@ const payLoan = async (req, res) => {
     const payer = await User.findOne({ name: loan.toUser });
     const receiver = await User.findOne({ name: loan.fromUser });
 
-    payer.balance -= amount;
-    receiver.balance += amount;
+    if (!payer || !receiver) {
+      return res.status(400).json({ error: "User not found" });
+    }
+
+    if (payer.balance < amount) {
+      return res.status(400).json({ error: "Insufficient balance" });
+    }
+
+    payer.balance -= Number(amount);
+    receiver.balance += Number(amount);
 
     await payer.save();
     await receiver.save();
 
-    loan.paidAmount = (loan.paidAmount || 0) + amount;
+    loan.paidAmount = (loan.paidAmount || 0) + Number(amount);
 
     if (loan.paidAmount >= loan.amount) {
       loan.status = "paid";
@@ -134,6 +160,7 @@ const payLoan = async (req, res) => {
     });
 
   } catch (err) {
+    console.error("PAY LOAN ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -144,6 +171,10 @@ const addToSavings = async (req, res) => {
   try {
     const { name, amount } = req.body;
 
+    if (!name || !amount) {
+      return res.status(400).json({ error: "Name and amount required" });
+    }
+
     const user = await User.findOne({ name });
     if (!user) return res.status(404).json({ error: "User not found" });
 
@@ -151,23 +182,36 @@ const addToSavings = async (req, res) => {
       return res.status(400).json({ error: "Not enough balance" });
     }
 
-    user.balance -= amount;
-    user.savings = (user.savings || 0) + amount;
+    user.balance -= Number(amount);
+    user.savings = (user.savings || 0) + Number(amount);
 
     await user.save();
+
+    await Transaction.create({
+      fromUser: name,
+      amount: Number(amount),
+      type: "savings",
+      note: "Added to savings",
+      createdAt: new Date()
+    });
 
     res.json({ message: "Moved to savings" });
 
   } catch (err) {
+    console.error("SAVINGS ADD ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 };
 
 
-// 💸 WITHDRAW FROM SAVINGS
+// 💸 WITHDRAW SAVINGS
 const withdrawSavings = async (req, res) => {
   try {
     const { name, amount } = req.body;
+
+    if (!name || !amount) {
+      return res.status(400).json({ error: "Name and amount required" });
+    }
 
     const user = await User.findOne({ name });
     if (!user) return res.status(404).json({ error: "User not found" });
@@ -176,14 +220,23 @@ const withdrawSavings = async (req, res) => {
       return res.status(400).json({ error: "Not enough savings" });
     }
 
-    user.savings -= amount;
-    user.balance += amount;
+    user.savings -= Number(amount);
+    user.balance += Number(amount);
 
     await user.save();
+
+    await Transaction.create({
+      toUser: name,
+      amount: Number(amount),
+      type: "withdraw",
+      note: "Withdraw from savings",
+      createdAt: new Date()
+    });
 
     res.json({ message: "Withdrawn from savings" });
 
   } catch (err) {
+    console.error("SAVINGS WITHDRAW ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -193,9 +246,10 @@ const withdrawSavings = async (req, res) => {
 const getAllTransactions = async (req, res) => {
   try {
     const txns = await Transaction.find().sort({ createdAt: -1 });
-    res.json(txns);
+    res.json(txns || []);
 
   } catch (err) {
+    console.error("GET TXN ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 };
@@ -221,32 +275,37 @@ const getStats = async (req, res) => {
     });
 
   } catch (err) {
+    console.error("STATS ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 };
 
 
-// 📈 MONTHLY REPORT
+// 📈 MONTHLY REPORT (FIXED)
 const getMonthlyReport = async (req, res) => {
   try {
     const data = await Transaction.aggregate([
       {
         $group: {
-          _id: { month: { $month: "$createdAt" } },
+          _id: {
+            month: { $month: "$createdAt" },
+            year: { $year: "$createdAt" }
+          },
           total: { $sum: "$amount" }
         }
-      }
+      },
+      { $sort: { "_id.year": 1, "_id.month": 1 } }
     ]);
 
-    res.json(data);
+    res.json(data || []);
 
   } catch (err) {
+    console.error("MONTHLY ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 };
 
 
-// ✅ EXPORT
 module.exports = {
   addMoney,
   addExpense,

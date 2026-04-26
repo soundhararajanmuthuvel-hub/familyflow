@@ -137,95 +137,164 @@
 
 <script>
 const familyName = sessionStorage.getItem("familyName");
-if (!familyName) location.href = "/";
+
+if (!familyName) {
+  alert("Session expired");
+  location.href = "/";
+}
+
 document.getElementById("family").innerText = "Family: " + familyName;
 
 
-// CREATE MEMBER
+// ➕ CREATE MEMBER
 async function create() {
-  const nameVal = document.getElementById("name").value.trim();
-  const phoneVal = document.getElementById("phone").value.trim();
+  const nameVal = name.value.trim();
+  const phoneVal = phone.value.trim();
 
   if (!nameVal || !phoneVal) {
     alert("Enter all fields properly");
     return;
   }
 
-  await fetch("/api/users/create", {
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({
-      name: nameVal,
-      phone: phoneVal,
-      familyName
-    })
-  });
+  try {
+    const res = await fetch("/api/users/create", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
+        name: nameVal,
+        phone: phoneVal,
+        familyName
+      })
+    });
 
-  // clear fields
-  document.getElementById("name").value = "";
-  document.getElementById("phone").value = "";
+    const data = await res.json();
 
-  load();
-}
-
-// LOAD EVERYTHING
-async function load() {
-
-  const users = await (await fetch(`/api/users/details?familyName=${familyName}`)).json();
-  const txns = await (await fetch("/api/transactions")).json();
-
-  // MEMBERS
-  memberList.innerHTML = users.map(u => `
-    <div class="user">
-      ${u.name} — ₹${u.balance || 0}
-    </div>
-  `).join("");
-
-  // TRANSACTIONS
-  txnList.innerHTML = txns.slice(0,5).map(t => `
-    <div class="txn">
-      ${t.type} — ₹${t.amount}
-    </div>
-  `).join("");
-
-  // LOANS
-  const loans = txns.filter(t => t.type === "loan");
-
-  loanList.innerHTML = loans.map(l => {
-    const rem = l.amount - (l.paidAmount || 0);
-
-    return `
-      <div class="txn">
-        ${l.fromUser} → ${l.toUser}<br>
-        ₹${l.amount} | Remaining ₹${rem}<br>
-        <span class="${l.status}">${l.status}</span>
-      </div>
-    `;
-  }).join("");
-
-  // STATS
-  totalMembers.innerText = users.length;
-  totalBalance.innerText = "₹" + users.reduce((a,b)=>a+(b.balance||0),0);
-  totalTxn.innerText = txns.length;
-  totalLoans.innerText = loans.length;
-}
-
-
-// CHART
-async function loadChart() {
-  const data = await (await fetch("/api/transactions/monthly")).json();
-
-  new Chart(document.getElementById("chart"), {
-    type:"line",
-    data:{
-      labels:data.map(d=>"M"+d._id.month),
-      datasets:[{ label:"Flow", data:data.map(d=>d.total) }]
+    if (!res.ok) {
+      alert(data.error || "Error");
+      return;
     }
+
+    name.value = "";
+    phone.value = "";
+
+    load();
+
+  } catch (err) {
+    console.error("CREATE ERROR:", err);
+    alert("Server error");
+  }
+}
+
+
+// 📅 FORMAT DATE
+function formatDate(date) {
+  if (!date) return "";
+  const d = new Date(date);
+  return d.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric"
   });
 }
 
 
-// LOGOUT
+// 📊 LOAD DATA
+async function load() {
+  try {
+    const resUsers = await fetch(`/api/users/details?familyName=${encodeURIComponent(familyName)}`);
+    const users = await resUsers.json();
+
+    const resTxn = await fetch("/api/transactions");
+    const txns = await resTxn.json();
+
+    // SAFE CHECK
+    const safeUsers = Array.isArray(users) ? users : [];
+    const safeTxns = Array.isArray(txns) ? txns : [];
+
+    if (!Array.isArray(users)) {
+      console.error("Users API error:", users);
+    }
+
+    if (!Array.isArray(txns)) {
+      console.error("Transactions API error:", txns);
+    }
+
+    // 👥 MEMBERS
+    memberList.innerHTML = safeUsers.map(u => `
+      <div class="user">
+        ${u.name} — ₹${u.balance || 0}
+      </div>
+    `).join("");
+
+    // 📜 TRANSACTIONS (WITH DATE + NOTE)
+    txnList.innerHTML = safeTxns.slice(0,5).map(t => `
+      <div class="txn">
+        <b>${t.type}</b> — ₹${t.amount}<br>
+        <small>${t.note || ""}</small><br>
+        <small>${formatDate(t.createdAt)}</small>
+      </div>
+    `).join("");
+
+    // 💳 LOANS
+    const loans = safeTxns.filter(t => t.type === "loan");
+
+    loanList.innerHTML = loans.map(l => {
+      const rem = l.amount - (l.paidAmount || 0);
+
+      return `
+        <div class="txn">
+          ${l.fromUser} → ${l.toUser}<br>
+          ₹${l.amount} | Remaining ₹${rem}<br>
+          <span class="${l.status}">${l.status}</span><br>
+          <small>${formatDate(l.createdAt)}</small>
+        </div>
+      `;
+    }).join("");
+
+    // 📊 STATS
+    totalMembers.innerText = safeUsers.length;
+    totalBalance.innerText = "₹" + safeUsers.reduce((a,b)=>a+(b.balance||0),0);
+    totalTxn.innerText = safeTxns.length;
+    totalLoans.innerText = loans.length;
+
+  } catch (err) {
+    console.error("LOAD ERROR:", err);
+    memberList.innerHTML = "<p>Error loading data</p>";
+    txnList.innerHTML = "";
+    loanList.innerHTML = "";
+  }
+}
+
+
+// 📈 CHART (SAFE)
+async function loadChart() {
+  try {
+    const res = await fetch("/api/transactions/monthly");
+    const data = await res.json();
+
+    if (!Array.isArray(data)) {
+      console.error("Chart data error:", data);
+      return;
+    }
+
+    new Chart(document.getElementById("chart"), {
+      type:"line",
+      data:{
+        labels:data.map(d=>"M"+d._id.month),
+        datasets:[{
+          label:"Flow",
+          data:data.map(d=>d.total)
+        }]
+      }
+    });
+
+  } catch (err) {
+    console.error("CHART ERROR:", err);
+  }
+}
+
+
+// 🔓 LOGOUT
 function logout() {
   sessionStorage.clear();
   location.href = "/";
