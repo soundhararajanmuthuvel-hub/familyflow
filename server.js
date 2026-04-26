@@ -13,19 +13,33 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, "public")));
 
 // ================== ROUTES ==================
-app.use("/api/users", require("./routes/userRoutes"));
-app.use("/api/transactions", require("./routes/transactionRoutes"));
-app.use("/api/goals", require("./routes/goalRoutes"));
+const userRoutes = require("./routes/userRoutes");
+const transactionRoutes = require("./routes/transactionRoutes");
+const goalRoutes = require("./routes/goalRoutes");
+
+app.use("/api/users", userRoutes);
+app.use("/api/transactions", transactionRoutes);
+app.use("/api/goals", goalRoutes);
 
 // ================== DEFAULT ROUTE ==================
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
+// ================== ERROR HANDLING ==================
+app.use((err, req, res, next) => {
+  console.error("❌ Global Error:", err.stack);
+  res.status(500).json({ 
+    success: false, 
+    message: "Internal Server Error", 
+    error: process.env.NODE_ENV === "development" ? err.message : {} 
+  });
+});
+
 // ================== MONGODB ==================
 mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log("✅ MongoDB Connected"))
-  .catch(err => console.log("❌ Mongo Error:", err));
+  .then(() => console.log(`✅ MongoDB Connected to: ${mongoose.connection.name}`))
+  .catch(err => console.error("❌ Mongo Connection Error:", err));
 
 // ================== PORT ==================
 const PORT = process.env.PORT || 5000;

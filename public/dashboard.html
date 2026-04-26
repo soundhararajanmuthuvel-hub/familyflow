@@ -210,13 +210,14 @@ async function load() {
   sav.innerText = current?.savings || 0;
 
   const res = await fetch("/api/transactions");
-  let data = await res.json();
+  const rawData = await res.json();
 
-  data = data.filter(t =>
+  // Ensure data is an array before filtering
+  const data = (Array.isArray(rawData) ? rawData : []).filter(t =>
     t.fromUser === user.name || t.toUser === user.name
   );
 
-  list.innerHTML = data.map(t => {
+  const listHtml = data.map(t => {
 
     let icon = "📄";
     let color = "#333";
@@ -246,6 +247,8 @@ async function load() {
       </div>
     `;
   }).join("");
+
+  document.getElementById("list").innerHTML = listHtml || "<p style='text-align:center; padding:20px;'>No transactions yet.</p>";
 }
 
 // OPEN POPUP

@@ -12,14 +12,29 @@
 
 <script>
 async function load() {
-  const u = await fetch("/api/users/all");
-  const users = await u.json();
+  try {
+    const u = await fetch("/api/users/all");
+    const users = await u.json();
 
-  const t = await fetch("/api/transactions");
-  const txns = await t.json();
+    const t = await fetch("/api/transactions");
+    const txns = await t.json();
 
-  users.innerHTML = users.map(x => `<p>${x.name} ₹${x.balance}</p>`).join("");
-  txns.innerHTML = txns.map(x => `<p>${x.fromUser} → ${x.toUser} ₹${x.amount}</p>`).join("");
+    // Defensive check to prevent .map() crashes
+    const safeUsers = Array.isArray(users) ? users : [];
+    const safeTxns = Array.isArray(txns) ? txns : [];
+
+    document.getElementById("users").innerHTML = safeUsers.map(x => 
+      `<p>${x.name} <span class="money">₹${x.balance || 0}</span></p>`
+    ).join("") || "<p>No users found.</p>";
+
+    document.getElementById("txns").innerHTML = safeTxns.map(x => 
+      `<p>${x.fromUser || 'System'} → ${x.toUser || 'System'} ₹${x.amount}</p>`
+    ).join("") || "<p>No transactions found.</p>";
+
+  } catch (err) {
+    console.error("Admin Load Error:", err);
+    document.getElementById("users").innerHTML = "<p>Error loading data.</p>";
+  }
 }
 
 load();

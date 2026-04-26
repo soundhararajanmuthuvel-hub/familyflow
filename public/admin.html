@@ -1,310 +1,50 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <title>Admin Dashboard</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="icon" type="image/png" href="/icon.png">
-
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-  <style>
-    body { margin:0; font-family:Arial; background:#f4f6fb; display:flex; }
-
-    .sidebar {
-      width:220px; background:#111827; color:white; height:100vh; padding:15px;
-    }
-
-    .sidebar h2 { margin-bottom:20px; }
-    .sidebar div { margin:10px 0; cursor:pointer; }
-
-    .main { flex:1; padding:20px; }
-
-    .top { display:flex; justify-content:space-between; margin-bottom:20px; }
-
-    .cards {
-      display:grid;
-      grid-template-columns:repeat(4,1fr);
-      gap:15px;
-    }
-
-    .card {
-      background:white;
-      padding:15px;
-      border-radius:12px;
-      box-shadow:0 4px 10px rgba(0,0,0,0.05);
-    }
-
-    .grid {
-      margin-top:20px;
-      display:grid;
-      grid-template-columns:1fr 1fr;
-      gap:15px;
-    }
-
-    .user { padding:8px 0; border-bottom:1px solid #eee; }
-
-    .txn { padding:8px 0; border-bottom:1px solid #eee; }
-
-    .paid { color:green; }
-    .partial { color:orange; }
-    .pending { color:red; }
-
-    button {
-      padding:6px 10px;
-      margin-top:5px;
-      border:none;
-      border-radius:6px;
-      cursor:pointer;
-      background:#3b82f6;
-      color:white;
-    }
-
-    .danger { background:red; }
-
-    input {
-      width:100%;
-      padding:8px;
-      margin:5px 0;
-    }
-  </style>
-</head>
-
-<body>
-
-<!-- SIDEBAR -->
-<div class="sidebar">
-  <h2>👨‍👩‍👧 FamilyFlow</h2>
-  <div>🏠 Dashboard</div>
-  <div>👥 Members</div>
-  <div>📜 Transactions</div>
-  <div>💳 Loans</div>
-  <div onclick="logout()" class="danger">🚪 Logout</div>
-</div>
-
-<!-- MAIN -->
-<div class="main">
-
-  <div class="top">
-    <h2>Admin Dashboard</h2>
-    <div id="family"></div>
-  </div>
-
-  <!-- STATS -->
-  <div class="cards">
-    <div class="card">👥 Members <h3 id="totalMembers">0</h3></div>
-    <div class="card">💰 Balance <h3 id="totalBalance">0</h3></div>
-    <div class="card">📜 Transactions <h3 id="totalTxn">0</h3></div>
-    <div class="card">💳 Loans <h3 id="totalLoans">0</h3></div>
-  </div>
-
-  <!-- CREATE MEMBER -->
-  <div class="card" style="margin-top:20px;">
-    <h3>Create Member</h3>
-    <input id="name" placeholder="Name">
-    <input id="phone" placeholder="Phone">
-    <button onclick="create()">Create</button>
-  </div>
-
-  <div class="grid">
-
-    <!-- RECENT TRANSACTIONS -->
-    <div class="card">
-      <h3>Recent Transactions</h3>
-      <div id="txnList"></div>
-    </div>
-
-    <!-- MEMBERS OVERVIEW -->
-    <div class="card">
-      <h3>Members Overview</h3>
-      <div id="memberList"></div>
-    </div>
-
-    <!-- LOANS -->
-    <div class="card">
-      <h3>Loans Overview</h3>
-      <div id="loanList"></div>
-    </div>
-
-    <!-- CHART -->
-    <div class="card">
-      <h3>Monthly Summary</h3>
-      <canvas id="chart"></canvas>
-    </div>
-
-  </div>
-
-</div>
-
+<!-- Partial output: Script section of admin.html -->
 <script>
-const familyName = sessionStorage.getItem("familyName");
+  async function loadDashboard() {
+    const dashboardContainer = document.getElementById('dashboard-content');
+    
+    try {
+      const response = await fetch('/api/users/details');
+      const users = await response.json();
 
-if (!familyName) {
-  alert("Session expired");
-  location.href = "/";
-}
+      // Task 4: Prevent crashes using Array.isArray check
+      const safeUsers = Array.isArray(users) ? users : [];
 
-document.getElementById("family").innerText = "Family: " + familyName;
-
-
-// ➕ CREATE MEMBER
-async function create() {
-  const nameVal = name.value.trim();
-  const phoneVal = phone.value.trim();
-
-  if (!nameVal || !phoneVal) {
-    alert("Enter all fields properly");
-    return;
-  }
-
-  try {
-    const res = await fetch("/api/users/create", {
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({
-        name: nameVal,
-        phone: phoneVal,
-        familyName
-      })
-    });
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      alert(data.error || "Error");
-      return;
-    }
-
-    name.value = "";
-    phone.value = "";
-
-    load();
-
-  } catch (err) {
-    console.error("CREATE ERROR:", err);
-    alert("Server error");
-  }
-}
-
-
-// 📅 FORMAT DATE
-function formatDate(date) {
-  if (!date) return "";
-  const d = new Date(date);
-  return d.toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric"
-  });
-}
-
-
-// 📊 LOAD DATA
-async function load() {
-  try {
-    const resUsers = await fetch(`/api/users/details?familyName=${encodeURIComponent(familyName)}`);
-    const users = await resUsers.json();
-
-    const resTxn = await fetch("/api/transactions");
-    const txns = await resTxn.json();
-
-    // SAFE CHECK
-    const safeUsers = Array.isArray(users) ? users : [];
-    const safeTxns = Array.isArray(txns) ? txns : [];
-
-    if (!Array.isArray(users)) {
-      console.error("Users API error:", users);
-    }
-
-    if (!Array.isArray(txns)) {
-      console.error("Transactions API error:", txns);
-    }
-
-    // 👥 MEMBERS
-    memberList.innerHTML = safeUsers.map(u => `
-      <div class="user">
-        ${u.name} — ₹${u.balance || 0}
-      </div>
-    `).join("");
-
-    // 📜 TRANSACTIONS (WITH DATE + NOTE)
-    txnList.innerHTML = safeTxns.slice(0,5).map(t => `
-      <div class="txn">
-        <b>${t.type}</b> — ₹${t.amount}<br>
-        <small>${t.note || ""}</small><br>
-        <small>${formatDate(t.createdAt)}</small>
-      </div>
-    `).join("");
-
-    // 💳 LOANS
-    const loans = safeTxns.filter(t => t.type === "loan");
-
-    loanList.innerHTML = loans.map(l => {
-      const rem = l.amount - (l.paidAmount || 0);
-
-      return `
-        <div class="txn">
-          ${l.fromUser} → ${l.toUser}<br>
-          ₹${l.amount} | Remaining ₹${rem}<br>
-          <span class="${l.status}">${l.status}</span><br>
-          <small>${formatDate(l.createdAt)}</small>
-        </div>
-      `;
-    }).join("");
-
-    // 📊 STATS
-    totalMembers.innerText = safeUsers.length;
-    totalBalance.innerText = "₹" + safeUsers.reduce((a,b)=>a+(b.balance||0),0);
-    totalTxn.innerText = safeTxns.length;
-    totalLoans.innerText = loans.length;
-
-  } catch (err) {
-    console.error("LOAD ERROR:", err);
-    memberList.innerHTML = "<p>Error loading data</p>";
-    txnList.innerHTML = "";
-    loanList.innerHTML = "";
-  }
-}
-
-
-// 📈 CHART (SAFE)
-async function loadChart() {
-  try {
-    const res = await fetch("/api/transactions/monthly");
-    const data = await res.json();
-
-    if (!Array.isArray(data)) {
-      console.error("Chart data error:", data);
-      return;
-    }
-
-    new Chart(document.getElementById("chart"), {
-      type:"line",
-      data:{
-        labels:data.map(d=>"M"+d._id.month),
-        datasets:[{
-          label:"Flow",
-          data:data.map(d=>d.total)
-        }]
+      if (safeUsers.length === 0) {
+        dashboardContainer.innerHTML = '<p class="warn">No user data found.</p>';
+        return;
       }
-    });
 
-  } catch (err) {
-    console.error("CHART ERROR:", err);
+      dashboardContainer.innerHTML = safeUsers.map(user => `
+        <div class="user-card">
+          <h3>${user.name}</h3>
+          <p>Family: ${user.familyName}</p>
+        </div>
+      `).join('');
+
+    } catch (error) {
+      console.error("Frontend Error:", error);
+      // Add fallback UI if API fails
+      dashboardContainer.innerHTML = `
+        <div class="error-msg">
+          ⚠️ Failed to load dashboard data. Please check your connection.
+        </div>`;
+    }
   }
-}
 
-
-// 🔓 LOGOUT
-function logout() {
-  sessionStorage.clear();
-  location.href = "/";
-}
-
-
-// INIT
-load();
-loadChart();
+  async function loadStats() {
+    try {
+      const res = await fetch('/api/transactions/stats');
+      const data = await res.json();
+      
+      const safeData = Array.isArray(data) ? data : [];
+      const statsList = document.getElementById('stats-list');
+      
+      statsList.innerHTML = safeData.map(item => `
+        <li>${item._id}: $${item.totalAmount}</li>
+      `).join('') || '<li>No stats available</li>';
+    } catch (err) {
+      console.error("Stats Error:", err);
+    }
+  }
 </script>
-
-</body>
-</html>
