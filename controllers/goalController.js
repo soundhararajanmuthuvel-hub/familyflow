@@ -1,5 +1,5 @@
 const Goal = require("../models/Goal");
-const User = require("../models/User");
+const User = require("../models/user");
 
 
 // 🎯 CREATE GOAL
